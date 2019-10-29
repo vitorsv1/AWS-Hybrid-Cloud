@@ -1,0 +1,77 @@
+#!/usr/bin/python3
+import os, sys, json, requests
+from requests.auth import HTTPBasicAuth
+
+args = None
+id = None
+funcao = str(sys.argv[1])
+
+
+def adicionar(args):
+    json_d={
+        "title":args[0],
+        "description":args[1]
+    }
+    r = requests.post('http://localhost:5000/Tarefa',
+                      json=json_d,
+                      auth=HTTPBasicAuth('vitor', 'python'))
+    print(r)
+
+def listar():
+    r=requests.get('http://localhost:5000/Tarefa',
+                    auth=HTTPBasicAuth('vitor', 'python'))
+    print(r.text)
+
+def buscar(id):
+    url = 'http://localhost:5000/Tarefa/{}'.format(id)
+    r=requests.get( url,
+                    auth=HTTPBasicAuth('vitor', 'python'))
+    print(r.text)
+
+def apagar(id):
+    url = 'http://localhost:5000/Tarefa/{}'.format(id)
+    r=requests.delete(url,
+                      auth=HTTPBasicAuth('vitor', 'python'))
+    print(r)
+
+def atualizar(id,args):
+    url = 'http://localhost:5000/Tarefa/{}'.format(id)
+    json_d={
+        "title":args[0],
+        "description":args[1]
+    }
+    r = requests.put(url,
+                     json=json_d,
+                     auth=HTTPBasicAuth('vitor','python'))
+    print(r.text)
+
+
+if funcao == "adicionar":
+    args = sys.argv[2:4]
+    adicionar(args)
+elif funcao == "listar":
+    listar()
+elif funcao == "buscar":
+    id = str(sys.argv[2])
+    buscar(id)
+elif funcao == "apagar":
+    id = str(sys.argv[2])
+    apagar(id)
+elif funcao == "atualizar":
+    id=str(sys.argv[2])
+    args=str(sys.argv[3])
+    atualizar(id, args)
+elif funcao == "help":
+    print("""
+    
+    Comandos possíveis para Tarefa API
+
+    – $tarefa adicionar [json]
+    – $tarefa listar
+    – $tarefa buscar [id]
+    – $tarefa apagar [id]
+    – $tarefa atualizar [id] [json]
+
+    """)
+else:
+    print("\nComando invalido. Use o comando 'help' para saber mais sobre as funções\n")

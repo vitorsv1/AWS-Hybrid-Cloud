@@ -38,7 +38,7 @@ task_fields = {
     'title': fields.String,
     'description': fields.String,
     'done': fields.Boolean,
-    'uri': fields.Url('task')
+    'url': fields.Url('task')
 }
 
 class TaskList(Resource):
