@@ -9,7 +9,7 @@ api = Api(app)
 auth = HTTPBasicAuth()
 
 @auth.get_password
-def get_password(username):
+def get_password(username): 
     if username == 'vitor':
         return 'python'
     return None
@@ -117,4 +117,4 @@ api.add_resource(Task, '/Tarefa/<int:id>', endpoint='task')
 api.add_resource(TaskHealth, '/healthcheck', endpoint='taskhealth')
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host="0.0.0.0")
