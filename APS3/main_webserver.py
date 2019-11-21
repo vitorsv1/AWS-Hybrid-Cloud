@@ -18,8 +18,8 @@ json = {
 res = mydb.my_table.insert(json) 
 
 #GET
-for i in mydatabase.myTable.find({title: 'MongoDB and Python'}):
+for i in mydb.myTable.find({'title': 'MongoDB and Python'}):
     print(i) 
 
 #COUNT
-print(mydatabase.myTable.count({title: 'MongoDB and Python'})) 
+print(mydb.myTable.count({'title': 'MongoDB and Python'})) 
