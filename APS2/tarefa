@@ -6,36 +6,35 @@ args = None
 id = None
 funcao = str(sys.argv[1])
 
-
 def adicionar(args):
     json_d={
         "title":args[0],
         "description":args[1]
     }
-    r = requests.post('http://3.93.153.119:5000/Tarefa',
+    r = requests.post('http://18.233.153.192:5000/Tarefa',
                       json=json_d,
                       auth=HTTPBasicAuth('vitor', 'python'))
     print(r)
 
 def listar():
-    r=requests.get('http://3.93.153.119:5000/Tarefa',
+    r=requests.get('http://18.233.153.192:5000/Tarefa',
                     auth=HTTPBasicAuth('vitor', 'python'))
     print(r.text)
 
 def buscar(id):
-    url = 'http://3.93.153.119:5000/Tarefa/{}'.format(id)
+    url = 'http://18.233.153.192:5000/Tarefa/{}'.format(id)
     r=requests.get( url,
                     auth=HTTPBasicAuth('vitor', 'python'))
     print(r.text)
 
 def apagar(id):
-    url = 'http://3.93.153.119:5000/Tarefa/{}'.format(id)
+    url = 'http://18.233.153.192:5000/Tarefa/{}'.format(id)
     r=requests.delete(url,
                       auth=HTTPBasicAuth('vitor', 'python'))
     print(r)
 
 def atualizar(id,args):
-    url = 'http://3.93.153.119:5000/Tarefa/{}'.format(id)
+    url = 'http://18.233.153.192:5000/Tarefa/{}'.format(id)
     json_d={
         "title":args[0],
         "description":args[1]
