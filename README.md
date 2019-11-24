@@ -1,6 +1,5 @@
-# Client Server Python
+# AWS "Hybrid" Cloud Project
 
-Atividade Pratica Supervisionada de Cloud Computing - Flask e Python
+This is a Project of Hybrid Cloud using two regions in AWS made in Cloud Computing matter in Insper, São Paulo.
 
-Criado um server local com requisições REST API ( APS1 )
-Criado um client para testar o servidor enviando e recebendo requisições ( APS2 )
+
