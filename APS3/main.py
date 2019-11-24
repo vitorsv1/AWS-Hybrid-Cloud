@@ -3,22 +3,15 @@ from botocore.exceptions import ClientError
 from bcolors import bcolors
 import time
 
+#KEY PAIR
 def keyPair(ec2Client, keyName):
-    print("""
-    \n##############################################
-
-                    KEY PAIR
-
-##############################################
-    """)
-
     ec2 = ec2Client
     response = ec2.describe_key_pairs()
 
     for i in response["KeyPairs"]:
         if i["KeyName"] == keyName:
+            print('\nDeletando Key Pair %s' % (keyName))
             ec2.delete_key_pair(KeyName=keyName)
-            print('\nDeletando Key Pair')
 
     print('\nCriando Key Pair nova %s\n' % keyName)
     keypair = ec2.create_key_pair(KeyName=keyName)
@@ -37,27 +30,18 @@ def keyPair(ec2Client, keyName):
 
     os.chmod(keyName, 0o400)
 
+#SECURITY GROUPS
 def securityGroups(ec2Client, securityGroupName, keyName):
-    print("""
-    \n##############################################
-
-                    SECURITY GROUP
-
-##############################################
-    """)
-
     ec2 = ec2Client
 
-    print('\nProurando VPC...')
+    print('\nProcurando VPC...')
     responseVPC = ec2.describe_vpcs()
     VPC_id = responseVPC['Vpcs'][0]['VpcId']
 
     if securityGroupName == 'vitorsv1-Projeto-secgroup-mongo':
         security_group_id = securityGroups_create_mongo(ec2,securityGroupName, VPC_id)
     else:
-        security_group_id = securityGroups_create_webserver(ec2,securityGroupName, VPC_id)
-    
-    
+        security_group_id = securityGroups_create_webserver(ec2,securityGroupName, VPC_id)   
     return security_group_id
 
 def securityGroups_create_mongo(ec2Client, securityGroupName, VPC_id):
@@ -92,7 +76,6 @@ def securityGroups_create_mongo(ec2Client, securityGroupName, VPC_id):
 
     except ClientError as e:
         print(e)
-
 
 def securityGroups_create_webserver(ec2Client, securityGroupName, VPC_id):
     ec2 = ec2Client
@@ -145,25 +128,17 @@ def securityGroup_delete(ec2, securityGroupName, keyName):
             print(e)
     except ClientError as e:
         print(e)
-    
 
+# INSTANCES
 def instances(ec2Resource, ec2Client, keyName, securityGroupId, securityGroupName, ubuntu18):
-    print("""
-    \n##############################################
-
-                    INSTANCES
-
-##############################################
-    """)
-
     ec2 = ec2Resource
     ec2Cliente = ec2Client
     
     ip = 0
     ip_webserver = 0
 
-    instances_kill(ec2Cliente["North-Virginia"],keyName)
-    instances_kill(ec2Cliente["Ohio"],keyName)
+    instances_kill(ec2Cliente["North-Virginia"],keyName["North-Virginia"])
+    instances_kill(ec2Cliente["Ohio"],keyName["Ohio"])
 
     userdata_mongo = """
     #cloud-config
@@ -185,7 +160,7 @@ def instances(ec2Resource, ec2Client, keyName, securityGroupId, securityGroupNam
     """    
     
     # Mongo Instance
-    i1 = instance_create(ec2["Ohio"], ec2Cliente["Ohio"], ubuntu18["Ohio"], securityGroupId["Mongo"], securityGroupName["Mongo"], keyName, userdata_mongo)    
+    i1 = instance_create(ec2["Ohio"], ec2Cliente["Ohio"], ubuntu18["Ohio"], securityGroupId["Mongo"], securityGroupName["Mongo"], keyName["Ohio"], userdata_mongo)    
     
     print('\nEsperando para instancia ficar ok...')
 
@@ -220,7 +195,7 @@ def instances(ec2Resource, ec2Client, keyName, securityGroupId, securityGroupNam
     """ % (ip)
 
     # WebServer de Ohio
-    i2 = instance_create(ec2["Ohio"], ec2Cliente["Ohio"], ubuntu18["Ohio"], securityGroupId["WebServer-OH"], securityGroupName["WebServer"], keyName, userdata_webserver)
+    i2 = instance_create(ec2["Ohio"], ec2Cliente["Ohio"], ubuntu18["Ohio"], securityGroupId["WebServer-OH"], securityGroupName["WebServer"], keyName["Ohio"], userdata_webserver)
 
     print('\nEsperando para instancia ficar ok...')
 
@@ -237,24 +212,25 @@ def instances(ec2Resource, ec2Client, keyName, securityGroupId, securityGroupNam
         for j in i['Instances']:
             for k in j['SecurityGroups']:
                 if k['GroupName'] == securityGroupName['WebServer']:
-                    ip_webserver = j['PrivateIpAddress']
+                    ip_webserver = j['PublicIpAddress']
 
     # WebServer de North-Virginia
-
     userdata_webserver_nv = """
     #cloud-config
     runcmd:
      - sudo apt-get update -y
      - sudo apt install python3-pip --yes
-     - pip3 install pydantic
-     - pip3 install fastapi
+     - sudo pip3 install fastapi
+     - sudo pip3 install pymongo
+     - sudo pip3 install email-validator
+     - sudo pip3 install uvicorn 
      - export webserverIP=%s
      - git clone https://github.com/vitorsv1/Hybrid-Cloud.git
      - cd Hybrid-Cloud
-     - uvicorn webserver-ohio:app --reload --host 0.0.0.0
+     - uvicorn webserver:app --reload --host 0.0.0.0 & curl 127.0.0.1:8000
     """ % (ip_webserver)
                 
-    i3 = instance_create(ec2["North-Virginia"], ec2Cliente["North-Virginia"],ubuntu18["North-Virginia"] ,securityGroupId["WebServer-NV"], securityGroupName["WebServer"], keyName, userdata_webserver_nv)
+    i3 = instance_create(ec2["North-Virginia"], ec2Cliente["North-Virginia"],ubuntu18["North-Virginia"] ,securityGroupId["WebServer-NV"], securityGroupName["WebServer"], keyName["North-Virginia"], userdata_webserver_nv)
 
     print('\nEsperando para instancias ficarem ok...')
 
@@ -274,9 +250,9 @@ def instances(ec2Resource, ec2Client, keyName, securityGroupId, securityGroupNam
                     ip_webserver_nv = j['PublicIpAddress']
 
 
-    print("\nPublic dns da instancia Mongo %s é %s com ip %s " %(i1.id, i1.public_dns_name, ip))
-    print("\nPublic dns da instancia WebServer-OH %s é %s com ip privado %s " %(i2.id, i2.public_dns_name, ip_webserver))
-    print("\nPublic dns da instancia WebServer-NV %s é %s com ip public %s" %(i3.id, i3.public_dns_name, ip_webserver_nv))
+    print("\nPublic dns da instancia Mongo %s é %s\nIp privado %s " %(i1.id, i1.public_dns_name, ip))
+    print("\nPublic dns da instancia WebServer-OH %s é %s\nIp publico %s " %(i2.id, i2.public_dns_name, ip_webserver))
+    print("\nPublic dns da instancia WebServer-NV %s é %s\nIp publico %s" %(i3.id, i3.public_dns_name, ip_webserver_nv))
 
     return ip_webserver_nv
 
@@ -333,51 +309,6 @@ def instance_create(ec2, ec2Cliente, ubuntu18, securityGroupId, securityGroupNam
 
     return response[0]
 
-def instances_kill_autoscaling(ec2, autoscaleClient):
-    print('\nDeletando instancias do AutoScaling')
-    response = autoscaleClient.describe_auto_scaling_instances()
-    instancesIds = []
-    for i in response['AutoScalingInstances']:
-        instancesIds.append(i['InstanceId'])
-
-    if instancesIds:
-        ec2.terminate_instances(InstanceIds=instancesIds)
-        print('\nEsperando instancias do auto scaling terminar')
-
-        waiter = ec2.get_waiter('instance_terminated')
-        waiter.wait(InstanceIds=instancesIds)
-
-def instance_get_info(ec2Resource):
-    response = ec2Resource.instances.filter(Filters=[{
-    'Name': 'instance-state-name',
-    'Values': ['running']}])
-
-    inst = {}
-
-    for instance in response:
-        for tag in instance.tags:
-            if 'Name'in tag['Key']:
-                name = tag['Value']
-        # Add instance info to a dictionary         
-        inst[instance.id] = {
-            'Name': name,
-            'Type': instance.instance_type,
-            'State': instance.state['Name'],
-            'Private IP': instance.private_ip_address,
-            'Public IP': instance.public_ip_address,
-            'Launch Time': instance.launch_time
-        }
-
-    attributes = ['Name', 'Type', 'State', 'Private IP', 'Public IP', 'Launch Time']
-    for instance_id, instance in inst.items():
-        print("Instance Id: %s" % instance_id)
-        for key in attributes:
-            print("{0}: {1}".format(key, instance[key]))
-        print("------")
-    
-    return inst
-
-
 def instances_kill(ec2Client, key):
     ec2 = ec2Client
 
@@ -409,6 +340,7 @@ def instances_kill(ec2Client, key):
         waiter = ec2.get_waiter('instance_terminated')
         waiter.wait(InstanceIds=instanceId)
 
+# TARGET GROUPS
 def target_group_create(elbv2Cliente, ec2Cliente, targetGroupName):
     print('\nCriando Target Group...')
     responseVPC = ec2Cliente.describe_vpcs()
@@ -417,7 +349,7 @@ def target_group_create(elbv2Cliente, ec2Cliente, targetGroupName):
     r = elbv2Cliente.create_target_group(
         Name = targetGroupName,
         Protocol = 'HTTP',
-        Port = 5000,
+        Port = 8000,
         VpcId = VPC_id,
         HealthCheckProtocol = 'HTTP',
         HealthCheckPath = '/healthcheck',
@@ -435,14 +367,6 @@ def target_group_create(elbv2Cliente, ec2Cliente, targetGroupName):
     return responseARN
 
 def target_group_delete(elbv2Cliente, ec2Cliente, targetGroupName):
-    print("""
-    \n##############################################
-
-                    TARGET GROUP
-
-##############################################
-    """)
-
     print('\nDeletando Target Group...')
     try:
         response = elbv2Cliente.describe_target_groups(
@@ -460,7 +384,6 @@ def target_group_delete(elbv2Cliente, ec2Cliente, targetGroupName):
             print(e)        
     except ClientError as e:
         print(e)
-
 
 def load_balancer_create(elbv2Client_nv, loadbalancerName, securityGroupId):
     print('\nCriando Load Balancer...')
@@ -494,18 +417,15 @@ def load_balancer_create(elbv2Client_nv, loadbalancerName, securityGroupId):
     waiter.wait(LoadBalancerArns=[lbArn])
     time.sleep(15)
 
+    r = elbv2Client_nv.describe_load_balancers()
+
+    for i in r['LoadBalancers']:
+        if i['LoadBalancerName'] == 'LoadBalancer-vitorsv1':
+            print('\nLoadBalancer esta no endereço %s:8000/docs' % (i['DNSName']))
+
     return lbArn
 
-
 def load_balancer_delete(elbv2Cliente, ec2Cliente, loadBalancerName):
-    print("""
-    \n##############################################
-
-                    LOAD BALANCER
-
-##############################################
-    """)
-
     print('\nDeletando Load Balancer...')
     try:
         response = elbv2Cliente.describe_load_balancers(
@@ -528,6 +448,7 @@ def load_balancer_delete(elbv2Cliente, ec2Cliente, loadBalancerName):
     except ClientError as e:
         print(e)
 
+# AUTO SCALING GROUP
 def auto_scaling_group_create(autoScalingCliente, autoScalingName,launchName,targetGroupARN):
     print('\nCriando AutoScaling Group..')
     response = autoScalingCliente.create_auto_scaling_group(
@@ -546,8 +467,7 @@ def auto_scaling_group_create(autoScalingCliente, autoScalingName,launchName,tar
     "us-east-1d",
     "us-east-1e",
     "us-east-1f"],
-    HealthCheckGracePeriod=123,
-)
+    HealthCheckGracePeriod=123)
 
 def auto_scaling_group_delete(autoScalingCliente, autoScalingName, forceDelete = False):
     print('\nDeletando Auto Scaling Group...')
@@ -577,8 +497,7 @@ def auto_scaling_group_delete(autoScalingCliente, autoScalingName, forceDelete =
     except ClientError as e:
         print(e)
 
-    
-
+# LAUNCH CONFIGURATION
 def launch_configuration_create(autoscale,launchName,amiId,keyName,securityGroupID, ip):
     print('\nCriando Launch Configuration...')
     userdata_webserver = """
@@ -588,11 +507,12 @@ def launch_configuration_create(autoscale,launchName,amiId,keyName,securityGroup
      - sudo apt install python3-pip --yes
      - sudo pip3 install fastapi
      - sudo pip3 install pymongo
+     - sudo pip3 install email-validator
      - sudo pip3 install uvicorn 
-     - export instanceIP=%s
+     - export webserverIP=%s
      - git clone https://github.com/vitorsv1/Hybrid-Cloud.git
      - cd Hybrid-Cloud
-     - uvicorn webserver-ohio:app --reload --host 0.0.0.0
+     - uvicorn webserver:app --reload --host 0.0.0.0 & curl 127.0.0.1:8000
     """ % (ip)
 
     response = autoscale.create_launch_configuration(
@@ -618,7 +538,9 @@ def launch_configuration_delete(autoscale,launchName):
     except ClientError as e:
         print(e)
 
+# LISTENER
 def listener_create(elbv2Client, loadBalancerArn, targetGroupArn):
+    print('\nCriando listener para LoadBalancer e TargetGroup')
     response = elbv2Client.create_listener(
             LoadBalancerArn = loadBalancerArn,
             Protocol='HTTP',
@@ -631,7 +553,9 @@ def listener_create(elbv2Client, loadBalancerArn, targetGroupArn):
             ])
 
 if __name__ == "__main__":
-    key = 'vitorsv1-Projeto'
+
+    key_nv = 'vitorsv1-Projeto-nv'
+    key_o = 'vitorsv1-Projeto-o'
     secGroup = 'vitorsv1-Projeto-secgroup'
     secGroup_mongo = 'vitorsv1-Projeto-secgroup-mongo'
     loadBalancer = 'vitorsv1-Projeto-loadbalancer'
@@ -641,55 +565,40 @@ if __name__ == "__main__":
     
     ec2Client_nv = boto3.client('ec2', region_name='us-east-1')
     ec2Client_o = boto3.client('ec2', region_name='us-east-2')
+
     elbv2Client_nv = boto3.client('elbv2')
     autoscaleClient = boto3.client('autoscaling')
+    
     ec2Resource_nv = boto3.resource('ec2', region_name='us-east-1')
     ec2Resource_o = boto3.resource('ec2', region_name='us-east-2')
     
     ubuntu18_nv = 'ami-04b9e92b5572fa0d1'
     ubuntu18_ohio = 'ami-0d5d9d301c853a04a'
-                    
-    r = ec2Client_o.describe_instances()
-    
-    for i in r['Reservations']:
-        for j in i['Instances']:
-            for k in j['SecurityGroups']:
-                if k['GroupName'] == secGroup_mongo:
-                    ip = j['PublicIpAddress']
-                    print(ip)
 
-    keyPair(ec2Client_nv,key)
-    keyPair(ec2Client_o,key)
+    keyPair(ec2Client_nv,key_nv)
+    keyPair(ec2Client_o,key_o)
 
-    target_group_delete(elbv2Client_nv, ec2Client_nv, targetGroup)
-    load_balancer_delete(elbv2Client_nv,ec2Client_nv, loadBalancer)
-    instances_kill_autoscaling(ec2Client_nv, autoscaleClient)
     auto_scaling_group_delete(autoscaleClient, autoScalingName, True)
+    load_balancer_delete(elbv2Client_nv,ec2Client_nv, loadBalancer)
+    target_group_delete(elbv2Client_nv, ec2Client_nv, targetGroup)
     launch_configuration_delete(autoscaleClient, launchName)
+    securityGroup_delete(ec2Client_nv, secGroup, key_nv)
+    securityGroup_delete(ec2Client_o, secGroup_mongo, key_o)
+    securityGroup_delete(ec2Client_o, secGroup, key_o)
 
-    securityGroup_delete(ec2Client_nv, secGroup, key)
-    securityGroup_delete(ec2Client_o, secGroup_mongo, key)
-    securityGroup_delete(ec2Client_o, secGroup, key)
-    security_group_id = securityGroups(ec2Client_nv,secGroup, key)
-    security_group_id_webserver = securityGroups(ec2Client_o,secGroup, key)
-    security_group_id_mongo = securityGroups(ec2Client_o,secGroup_mongo, key)
-
+    security_group_id = securityGroups(ec2Client_nv,secGroup, key_nv)
+    security_group_id_webserver = securityGroups(ec2Client_o,secGroup, key_o)
+    security_group_id_mongo = securityGroups(ec2Client_o,secGroup_mongo, key_o)
     redirect_ip = instances(ec2Resource = {"North-Virginia":ec2Resource_nv, "Ohio": ec2Resource_o},
             ec2Client = {"North-Virginia":ec2Client_nv, "Ohio": ec2Client_o}, 
-            keyName = key, 
+            keyName = {"North-Virginia": key_nv, "Ohio": key_o}, 
             securityGroupId = {"WebServer-NV": security_group_id, "WebServer-OH" : security_group_id_webserver, "Mongo": security_group_id_mongo}, 
             securityGroupName = {"WebServer" : secGroup, "Mongo": secGroup_mongo}, 
-            ubuntu18 = {"North-Virginia" : ubuntu18_nv, "Ohio": ubuntu18_ohio}, )
-    
-    
+            ubuntu18 = {"North-Virginia" : ubuntu18_nv, "Ohio": ubuntu18_ohio})    
     target_group_arn = target_group_create(elbv2Client_nv, ec2Client_nv, targetGroup)
-    
     load_balancer_arn = load_balancer_create(elbv2Client_nv,loadBalancer,security_group_id)
-    
-    launch_configuration_create(autoscaleClient, launchName, ubuntu18_nv, key, security_group_id, redirect_ip)
-
+    launch_configuration_create(autoscaleClient, launchName, ubuntu18_nv, key_nv, security_group_id, redirect_ip)
     auto_scaling_group_create(autoscaleClient, autoScalingName,launchName,target_group_arn)  
-
     listener_create(elbv2Client_nv, load_balancer_arn, target_group_arn)
 
 
