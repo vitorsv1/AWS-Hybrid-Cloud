@@ -67,7 +67,7 @@ def securityGroups_create_mongo(ec2Client, securityGroupName, VPC_id):
                     'IpProtocol' : 'tcp',
                     'FromPort' : 27017,
                     'ToPort' : 27017,
-                    'IpRanges' : [{'CidrIp' : '0.0.0.0/0'}] #ESPECIFICAR O IP ELASTICO DO WEBSERVER
+                    'IpRanges' : [{'CidrIp' : '0.0.0.0/0'}]
                 }
             ]
         )
