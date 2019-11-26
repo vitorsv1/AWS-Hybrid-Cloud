@@ -31,7 +31,7 @@ def keyPair(ec2Client, keyName):
     os.chmod(keyName, 0o400)
 
 #SECURITY GROUPS
-def securityGroups(ec2Client, securityGroupName, keyName):
+def securityGroups(ec2Client, securityGroupName, keyName, loadbalancer):
     ec2 = ec2Client
 
     print('\nProcurando VPC...')
@@ -40,8 +40,10 @@ def securityGroups(ec2Client, securityGroupName, keyName):
 
     if securityGroupName == 'vitorsv1-Projeto-secgroup-mongo':
         security_group_id = securityGroups_create_mongo(ec2,securityGroupName, VPC_id)
+    elif loadbalancer:
+        security_group_id = securityGroups_create_webserver_loadbalancer(ec2,securityGroupName, VPC_id)   
     else:
-        security_group_id = securityGroups_create_webserver(ec2,securityGroupName, VPC_id)   
+        security_group_id = securityGroups_create_webserver_ohio(ec2, securityGroupName, VPC_id)
     return security_group_id
 
 def securityGroups_create_mongo(ec2Client, securityGroupName, VPC_id):
@@ -59,12 +61,6 @@ def securityGroups_create_mongo(ec2Client, securityGroupName, VPC_id):
             IpPermissions=[
                 {
                     'IpProtocol' : 'tcp',
-                    'FromPort' : 22,
-                    'ToPort' : 22,
-                    'IpRanges' : [{'CidrIp' : '0.0.0.0/0'}]
-                },
-                {
-                    'IpProtocol' : 'tcp',
                     'FromPort' : 27017,
                     'ToPort' : 27017,
                     'IpRanges' : [{'CidrIp' : '0.0.0.0/0'}]
@@ -77,7 +73,22 @@ def securityGroups_create_mongo(ec2Client, securityGroupName, VPC_id):
     except ClientError as e:
         print(e)
 
-def securityGroups_create_webserver(ec2Client, securityGroupName, VPC_id):
+def securityGroups_create_webserver_ohio(ec2Client, securityGroupName, VPC_id):
+    ec2 = ec2Client
+
+    try:
+        response = ec2.create_security_group(GroupName=securityGroupName,
+                                             Description="vitorsv1 Projeto",
+                                             VpcId = VPC_id)
+        security_group_id = response['GroupId']
+        print('\nSecurity Group' + bcolors.OKGREEN + ' criado' + bcolors.ENDC +  ' %s' % (security_group_id))
+
+        return security_group_id
+
+    except ClientError as e:
+        print(e)
+
+def securityGroups_create_webserver_loadbalancer(ec2Client, securityGroupName, VPC_id):
     ec2 = ec2Client
 
     try:
@@ -90,12 +101,6 @@ def securityGroups_create_webserver(ec2Client, securityGroupName, VPC_id):
         data = ec2.authorize_security_group_ingress(
             GroupId=security_group_id,
             IpPermissions=[
-                {
-                    'IpProtocol' : 'tcp',
-                    'FromPort' : 22,
-                    'ToPort' : 22,
-                    'IpRanges' : [{'CidrIp' : '0.0.0.0/0'}]
-                },
                 {
                     'IpProtocol' : 'tcp',
                     'FromPort' : 8000,
@@ -128,6 +133,7 @@ def securityGroup_delete(ec2, securityGroupName, keyName):
             print(e)
     except ClientError as e:
         print(e)
+
 
 # INSTANCES
 def instances(ec2Resource, ec2Client, keyName, securityGroupId, securityGroupName, ubuntu18):
@@ -212,7 +218,28 @@ def instances(ec2Resource, ec2Client, keyName, securityGroupId, securityGroupNam
         for j in i['Instances']:
             for k in j['SecurityGroups']:
                 if k['GroupName'] == securityGroupName['WebServer']:
+                    ip_webserver_private = j['PrivateIpAddress']
                     ip_webserver = j['PublicIpAddress']
+                    
+
+    sec = ec2Resource["Ohio"].SecurityGroup(securityGroupId["Mongo"])
+    sec.authorize_ingress(
+            IpPermissions=[
+                {
+                    'IpProtocol' : 'tcp',
+                    'FromPort' : 27017,
+                    'ToPort' : 27017,
+                    'IpRanges' : [{'CidrIp' : ip_webserver_private+'/32'}]
+                }])
+
+    sec.revoke_ingress(
+        IpPermissions=[
+                {
+                    'IpProtocol' : 'tcp',
+                    'FromPort' : 27017,
+                    'ToPort' : 27017,
+                    'IpRanges' : [{'CidrIp' : '0.0.0.0/0'}]
+                }])
 
     # WebServer de North-Virginia
     userdata_webserver_nv = """
@@ -248,6 +275,18 @@ def instances(ec2Resource, ec2Client, keyName, securityGroupId, securityGroupNam
             for k in j['SecurityGroups']:
                 if k['GroupName'] == securityGroupName['WebServer']:
                     ip_webserver_nv = j['PublicIpAddress']
+
+    ec2Cliente["Ohio"].authorize_security_group_ingress(
+            GroupId=securityGroupId["WebServer-OH"],
+            IpPermissions=[
+                {
+                    'IpProtocol' : 'tcp',
+                    'FromPort' : 8000,
+                    'ToPort' : 8000,
+                    'IpRanges' : [{'CidrIp' : ip_webserver_nv+'/32'}]
+                }
+            ]
+        )
 
 
     print("\nPublic dns da instancia Mongo %s é %s\nIp privado %s " %(i1.id, i1.public_dns_name, ip))
@@ -419,10 +458,6 @@ def load_balancer_create(elbv2Client_nv, loadbalancerName, securityGroupId):
 
     r = elbv2Client_nv.describe_load_balancers()
 
-    for i in r['LoadBalancers']:
-        if i['LoadBalancerName'] == 'LoadBalancer-vitorsv1':
-            print('\nLoadBalancer esta no endereço %s:8000/docs' % (i['DNSName']))
-
     return lbArn
 
 def load_balancer_delete(elbv2Cliente, ec2Cliente, loadBalancerName):
@@ -586,15 +621,15 @@ if __name__ == "__main__":
     securityGroup_delete(ec2Client_o, secGroup_mongo, key_o)
     securityGroup_delete(ec2Client_o, secGroup, key_o)
 
-    security_group_id = securityGroups(ec2Client_nv,secGroup, key_nv)
-    security_group_id_webserver = securityGroups(ec2Client_o,secGroup, key_o)
-    security_group_id_mongo = securityGroups(ec2Client_o,secGroup_mongo, key_o)
+    security_group_id = securityGroups(ec2Client_nv,secGroup, key_nv, loadbalancer = True)
+    security_group_id_webserver = securityGroups(ec2Client_o,secGroup, key_o, loadbalancer = False)
+    security_group_id_mongo = securityGroups(ec2Client_o,secGroup_mongo, key_o, loadbalancer = False)
     redirect_ip = instances(ec2Resource = {"North-Virginia":ec2Resource_nv, "Ohio": ec2Resource_o},
             ec2Client = {"North-Virginia":ec2Client_nv, "Ohio": ec2Client_o}, 
             keyName = {"North-Virginia": key_nv, "Ohio": key_o}, 
             securityGroupId = {"WebServer-NV": security_group_id, "WebServer-OH" : security_group_id_webserver, "Mongo": security_group_id_mongo}, 
             securityGroupName = {"WebServer" : secGroup, "Mongo": secGroup_mongo}, 
-            ubuntu18 = {"North-Virginia" : ubuntu18_nv, "Ohio": ubuntu18_ohio})    
+            ubuntu18 = {"North-Virginia" : ubuntu18_nv, "Ohio": ubuntu18_ohio})        
     target_group_arn = target_group_create(elbv2Client_nv, ec2Client_nv, targetGroup)
     load_balancer_arn = load_balancer_create(elbv2Client_nv,loadBalancer,security_group_id)
     launch_configuration_create(autoscaleClient, launchName, ubuntu18_nv, key_nv, security_group_id, redirect_ip)
