@@ -424,18 +424,12 @@ def target_group_delete(elbv2Cliente, ec2Cliente, targetGroupName):
     except ClientError as e:
         print(e)
 
-def load_balancer_create(elbv2Client_nv, loadbalancerName, securityGroupId):
+def load_balancer_create(elbv2Client_nv, loadbalancerName, securityGroupId, subnetsList):
     print('\nCriando Load Balancer...')
 
     r = elbv2Client_nv.create_load_balancer(
         Name = loadbalancerName,
-        Subnets=['subnet-1c813340',
-        'subnet-4999d803',
-        'subnet-540e795b',
-        'subnet-5ddb6b3a',
-        'subnet-91a463af',
-        'subnet-d164d8ff'
-        ],
+        Subnets=subnetsList,
         SecurityGroups=[
             securityGroupId,
         ],
